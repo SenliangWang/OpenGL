@@ -89,9 +89,10 @@ void update()
 
 void render()
 {
-    //Clear color buffer
+    //Clear color buffer    设置一个状态变量，然后使用当前状态完成操作。
+    glClearColor(1.0f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
-    
+
     //Render quad
     glBegin(GL_QUADS);
     glVertex2f(-0.5f, -0.5f);
@@ -111,7 +112,6 @@ int main(int argc, char* args[])
 
     //Create OpenGL 2.1 context
     glutInitContextVersion(2, 1);
-
 
     //Create Double Buffered Window
     glutInitDisplayMode(GLUT_DOUBLE);
