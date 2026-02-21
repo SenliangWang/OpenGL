@@ -78,8 +78,10 @@ static const int   WIN_H = 768;
 static std::vector<Object> g_objects;
 static std::set<int>       g_selected;
 
-static float g_bgR = 0.15f, g_bgG = 0.15f, g_bgB = 0.15f;
-static float g_alpha = 0.45f;
+static float g_bgColor[3]        = { 0.15f, 0.15f, 0.15f };
+static float g_highlightColor[3] = { 0.30f, 0.60f, 1.00f };
+static float g_baseColor[3]      = { 1.00f, 1.00f, 1.00f };
+static float g_highlightAlpha    = 0.55f;
 
 static float g_camAngleX = 25.0f;
 static float g_camAngleY = -35.0f;
@@ -99,14 +101,14 @@ static void initScene()
 
     struct Def { float x,y,z, w,h,d, r,g,b; };
     Def defs[] = {
-        { 0.0f,  0.0f,  0.0f,  1.8f, 1.8f, 1.8f,  0.2f, 0.6f, 0.9f },
-        { 2.5f,  0.0f,  1.0f,  1.4f, 1.4f, 1.4f,  0.9f, 0.3f, 0.3f },
-        {-2.2f,  0.0f, -0.5f,  1.6f, 1.0f, 1.6f,  0.3f, 0.8f, 0.4f },
-        { 0.8f,  1.5f, -1.5f,  1.2f, 1.2f, 1.2f,  0.9f, 0.8f, 0.2f },
-        {-1.0f, -1.2f,  2.0f,  1.0f, 1.0f, 1.0f,  0.7f, 0.4f, 0.9f },
-        { 3.0f,  1.0f, -2.0f,  1.3f, 1.3f, 1.3f,  0.9f, 0.6f, 0.1f },
-        {-3.0f,  1.5f,  1.5f,  1.1f, 1.5f, 1.1f,  0.4f, 0.7f, 0.8f },
-        { 1.5f, -1.5f, -3.0f,  1.4f, 0.8f, 1.4f,  0.8f, 0.5f, 0.6f },
+        { 0.0f,  0.0f,  0.0f,  1.8f, 1.8f, 1.8f,  0.55f, 0.55f, 0.55f },
+        { 2.5f,  0.0f,  1.0f,  1.4f, 1.4f, 1.4f,  0.60f, 0.60f, 0.60f },
+        {-2.2f,  0.0f, -0.5f,  1.6f, 1.0f, 1.6f,  0.50f, 0.50f, 0.50f },
+        { 0.8f,  1.5f, -1.5f,  1.2f, 1.2f, 1.2f,  0.65f, 0.65f, 0.65f },
+        {-1.0f, -1.2f,  2.0f,  1.0f, 1.0f, 1.0f,  0.45f, 0.45f, 0.45f },
+        { 3.0f,  1.0f, -2.0f,  1.3f, 1.3f, 1.3f,  0.70f, 0.70f, 0.70f },
+        {-3.0f,  1.5f,  1.5f,  1.1f, 1.5f, 1.1f,  0.52f, 0.52f, 0.52f },
+        { 1.5f, -1.5f, -3.0f,  1.4f, 0.8f, 1.4f,  0.58f, 0.58f, 0.58f },
     };
 
     for (auto& d : defs) {
@@ -259,7 +261,7 @@ static int pickObjectAt(GLFWwindow* win, double mx, double my)
 
 static void renderScene(int w, int h)
 {
-    glClearColor(g_bgR, g_bgG, g_bgB, 1.0f);
+    glClearColor(g_bgColor[0], g_bgColor[1], g_bgColor[2], 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     setupCamera(w, h);
@@ -270,7 +272,7 @@ static void renderScene(int w, int h)
     glDisable(GL_BLEND);
 
     // =========================================================
-    // 阶段 1：正常绘制所有【非选中】物体
+    // 阶段 1：正常绘制所有【非选中】物体（灰色）
     // =========================================================
     for (auto& o : g_objects) {
         if (g_selected.count(o.id))
@@ -280,19 +282,18 @@ static void renderScene(int w, int h)
     }
 
     // =========================================================
-    // 阶段 2：选中物体的两遍绘制
+    // 阶段 2：选中物体的两遍绘制（AutoCAD 风格高亮）
     //
-    //   核心思路:
-    //   - 清空深度缓冲 → 选中物体不会被其他物体遮挡（"上浮"）
-    //   - 保留 GL_LESS 深度测试 → 物体自身的前后面关系正确
-    //   - 第一遍：背景色实心，写入深度（遮住后方 + 建立自身深度）
-    //   - 第二遍：半透明物体色，只读深度不写深度（GL_LEQUAL）
+    //   清空深度缓冲 → 选中物体浮于所有物体之上
+    //   保留 GL_LESS → 物体自身前后面关系正确
+    //   第一遍：白色底色实心填充（写深度）→ 遮住后方 + 提供明亮底色
+    //   第二遍：浅蓝色半透明叠加（只读深度）→ 蓝色与白底混合 = 通透蓝玻璃
     // =========================================================
     if (!g_selected.empty()) {
         glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
-        // --- 第一遍：背景色实心填充，建立选中物体自身的正确深度 ---
+        // --- 第一遍：白色底色，建立深度 ---
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
@@ -300,11 +301,11 @@ static void renderScene(int w, int h)
         for (auto& o : g_objects) {
             if (!g_selected.count(o.id))
                 continue;
-            glColor3f(g_bgR, g_bgG, g_bgB);
+            glColor3f(g_baseColor[0], g_baseColor[1], g_baseColor[2]);
             drawObject(o);
         }
 
-        // --- 第二遍：半透明物体色，只在已画过的表面上叠加 ---
+        // --- 第二遍：浅蓝色半透明，叠加在白底上 ---
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
         glEnable(GL_BLEND);
@@ -313,7 +314,8 @@ static void renderScene(int w, int h)
         for (auto& o : g_objects) {
             if (!g_selected.count(o.id))
                 continue;
-            glColor4f(o.r, o.g, o.b, g_alpha);
+            glColor4f(g_highlightColor[0], g_highlightColor[1],
+                      g_highlightColor[2], g_highlightAlpha);
             drawObject(o);
         }
 
@@ -402,8 +404,10 @@ static void drawImGui()
     ImGui::Text("Scroll       : zoom");
     ImGui::Separator();
 
-    ImGui::SliderFloat("Alpha", &g_alpha, 0.0f, 1.0f, "%.2f");
-    ImGui::ColorEdit3("Background", &g_bgR);
+    ImGui::ColorEdit3("Highlight",  g_highlightColor);
+    ImGui::ColorEdit3("Base",       g_baseColor);
+    ImGui::SliderFloat("Alpha",     &g_highlightAlpha, 0.0f, 1.0f, "%.2f");
+    ImGui::ColorEdit3("Background", g_bgColor);
     ImGui::Separator();
 
     if (g_selected.empty()) {
