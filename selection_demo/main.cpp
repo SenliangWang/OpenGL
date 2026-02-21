@@ -81,7 +81,7 @@ static std::set<int>       g_selected;
 static float g_bgColor[3]        = { 0.15f, 0.15f, 0.15f };
 static float g_highlightColor[3] = { 0.30f, 0.60f, 1.00f };
 static float g_baseColor[3]      = { 1.00f, 1.00f, 1.00f };
-static float g_highlightAlpha    = 0.55f;
+static float g_highlightAlpha    = 0.35f;
 
 static float g_camAngleX = 25.0f;
 static float g_camAngleY = -35.0f;
@@ -200,6 +200,22 @@ static void setupLighting()
     glLightfv(GL_LIGHT0, GL_DIFFUSE,  diff);
 }
 
+static void setupHighlightLighting()
+{
+    GLfloat amb[]  = { 0.85f, 0.85f, 0.85f, 1.0f };
+    GLfloat diff[] = { 0.20f, 0.20f, 0.20f, 1.0f };
+    glLightfv(GL_LIGHT0, GL_AMBIENT,  amb);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE,  diff);
+}
+
+static void restoreNormalLighting()
+{
+    GLfloat amb[]  = { 0.25f, 0.25f, 0.25f, 1.0f };
+    GLfloat diff[] = { 0.9f, 0.9f, 0.9f, 1.0f };
+    glLightfv(GL_LIGHT0, GL_AMBIENT,  amb);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE,  diff);
+}
+
 // ---------------------------------------------------------------------------
 // 颜色拾取 (Color Picking)
 //   将物体 id 编码为 RGB：R = id & 0xFF, G = (id>>8) & 0xFF, B = (id>>16) & 0xFF
@@ -293,7 +309,9 @@ static void renderScene(int w, int h)
         glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
-        // --- 第一遍：白色底色，建立深度 ---
+        setupHighlightLighting();
+
+        // --- 第一遍：白色底色（柔和光照），建立深度 ---
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
@@ -305,7 +323,7 @@ static void renderScene(int w, int h)
             drawObject(o);
         }
 
-        // --- 第二遍：浅蓝色半透明，叠加在白底上 ---
+        // --- 第二遍：浅蓝色半透明（柔和光照），叠加在白底上 ---
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
         glEnable(GL_BLEND);
@@ -319,6 +337,7 @@ static void renderScene(int w, int h)
             drawObject(o);
         }
 
+        restoreNormalLighting();
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
         glDepthFunc(GL_LESS);
