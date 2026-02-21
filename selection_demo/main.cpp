@@ -278,7 +278,8 @@ static int pickObjectAt(GLFWwindow* win, double mx, double my)
 static void renderScene(int w, int h)
 {
     glClearColor(g_bgColor[0], g_bgColor[1], g_bgColor[2], 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearStencil(0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     setupCamera(w, h);
     setupLighting();
@@ -286,9 +287,10 @@ static void renderScene(int w, int h)
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDisable(GL_BLEND);
+    glDisable(GL_STENCIL_TEST);
 
     // =========================================================
-    // 阶段 1：正常绘制所有【非选中】物体（灰色）
+    // Step 1: 正常绘制所有【非选中】物体
     // =========================================================
     for (auto& o : g_objects) {
         if (g_selected.count(o.id))
@@ -297,23 +299,58 @@ static void renderScene(int w, int h)
         drawObject(o);
     }
 
-    // =========================================================
-    // 阶段 2：选中物体的两遍绘制（AutoCAD 风格高亮）
-    //
-    //   清空深度缓冲 → 选中物体浮于所有物体之上
-    //   保留 GL_LESS → 物体自身前后面关系正确
-    //   第一遍：白色底色实心填充（写深度）→ 遮住后方 + 提供明亮底色
-    //   第二遍：浅蓝色半透明叠加（只读深度）→ 蓝色与白底混合 = 通透蓝玻璃
-    // =========================================================
     if (!g_selected.empty()) {
+        // =========================================================
+        // Step 2: 在原始深度下绘制选中物体 + 写 Stencil
+        //   深度通过 → Stencil 写 1（该像素本来就可见，不被其他物体遮挡）
+        //   深度失败 → Stencil 保持 0（该像素被前方物体遮挡）
+        // =========================================================
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_ALWAYS, 1, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        glStencilMask(0xFF);
+
+        for (auto& o : g_objects) {
+            if (!g_selected.count(o.id))
+                continue;
+            glColor3f(o.r, o.g, o.b);
+            drawObject(o);
+        }
+
+        // =========================================================
+        // Step 3: 清空深度缓冲 → 选中物体将"上浮"到最前
+        // =========================================================
         glClear(GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
 
-        setupHighlightLighting();
-
-        // --- 第一遍：白色底色（柔和光照），建立深度 ---
+        // =========================================================
+        // Step 4: 仅深度 Pass — 建立选中物体自身的正确深度（防止背面穿透）
+        // =========================================================
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
+        glDisable(GL_STENCIL_TEST);
+
+        for (auto& o : g_objects) {
+            if (!g_selected.count(o.id))
+                continue;
+            drawObject(o);
+        }
+
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+        // =========================================================
+        // Step 5: Stencil=1 区域（原本可见）→ 白色底色
+        //   遮住原本在后方的物体，提供明亮底色
+        // =========================================================
+        setupHighlightLighting();
+
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_EQUAL, 1, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        glStencilMask(0x00);
+
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
         glDisable(GL_BLEND);
 
         for (auto& o : g_objects) {
@@ -323,9 +360,12 @@ static void renderScene(int w, int h)
             drawObject(o);
         }
 
-        // --- 第二遍：浅蓝色半透明（柔和光照），叠加在白底上 ---
-        glDepthFunc(GL_LEQUAL);
-        glDepthMask(GL_FALSE);
+        // =========================================================
+        // Step 6: 全区域半透明蓝色叠加
+        //   Stencil=1 区域: 蓝色 + 白底 → 鲜亮浅蓝（不透出后方物体）
+        //   Stencil=0 区域: 蓝色 + 前方物体色 → 透出前方物体
+        // =========================================================
+        glDisable(GL_STENCIL_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -463,6 +503,7 @@ int main()
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_STENCIL_BITS, 8);
     glfwWindowHint(GLFW_SAMPLES, 4);
 
     GLFWwindow* window = glfwCreateWindow(WIN_W, WIN_H,
