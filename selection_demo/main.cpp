@@ -280,30 +280,44 @@ static void renderScene(int w, int h)
     }
 
     // =========================================================
-    // 阶段 2：对每个选中物体执行两遍绘制
-    //   关闭深度测试 → 物体"上浮"，不被前方物体遮挡
-    //   第一遍：用背景色实心绘制，遮住后方物体
-    //   第二遍：开启混合，用物体原色半透明绘制（只和第一遍的背景色混合）
+    // 阶段 2：选中物体的两遍绘制
+    //
+    //   核心思路:
+    //   - 清空深度缓冲 → 选中物体不会被其他物体遮挡（"上浮"）
+    //   - 保留 GL_LESS 深度测试 → 物体自身的前后面关系正确
+    //   - 第一遍：背景色实心，写入深度（遮住后方 + 建立自身深度）
+    //   - 第二遍：半透明物体色，只读深度不写深度（GL_LEQUAL）
     // =========================================================
     if (!g_selected.empty()) {
-        glDepthFunc(GL_ALWAYS);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+
+        // --- 第一遍：背景色实心填充，建立选中物体自身的正确深度 ---
+        glDepthFunc(GL_LESS);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
 
         for (auto& o : g_objects) {
             if (!g_selected.count(o.id))
                 continue;
-
-            // --- 第一遍：背景色实心填充 ---
-            glDisable(GL_BLEND);
             glColor3f(g_bgR, g_bgG, g_bgB);
             drawObject(o);
+        }
 
-            // --- 第二遍：半透明物体色 ---
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // --- 第二遍：半透明物体色，只在已画过的表面上叠加 ---
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        for (auto& o : g_objects) {
+            if (!g_selected.count(o.id))
+                continue;
             glColor4f(o.r, o.g, o.b, g_alpha);
             drawObject(o);
         }
 
+        glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
         glDepthFunc(GL_LESS);
     }
