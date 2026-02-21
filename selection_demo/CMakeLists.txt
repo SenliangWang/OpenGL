@@ -66,10 +66,3 @@ target_link_libraries(selection_demo PRIVATE
     OpenGL::GL
     ${CMAKE_DL_LIBS}
 )
-
-# Windows 上 GLU 在 glu32.lib 中
-if(WIN32)
-    target_link_libraries(selection_demo PRIVATE glu32)
-else()
-    target_link_libraries(selection_demo PRIVATE OpenGL::GLU)
-endif()

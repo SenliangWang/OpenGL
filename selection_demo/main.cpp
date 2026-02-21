@@ -1,6 +1,5 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <GL/glu.h>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -10,6 +9,53 @@
 #include <set>
 #include <cmath>
 #include <cstdio>
+
+// ---------------------------------------------------------------------------
+// gluPerspective / gluLookAt 替代实现，消除对 GL/glu.h 的依赖
+// ---------------------------------------------------------------------------
+
+static void myPerspective(double fovY, double aspect, double zNear, double zFar)
+{
+    const double pi = 3.14159265358979323846;
+    double f = 1.0 / tan(fovY * pi / 360.0);
+
+    double m[16] = {};
+    m[0]  = f / aspect;
+    m[5]  = f;
+    m[10] = (zFar + zNear) / (zNear - zFar);
+    m[11] = -1.0;
+    m[14] = (2.0 * zFar * zNear) / (zNear - zFar);
+
+    glMultMatrixd(m);
+}
+
+static void myLookAt(double eyeX, double eyeY, double eyeZ,
+                     double cenX, double cenY, double cenZ,
+                     double upX,  double upY,  double upZ)
+{
+    double fx = cenX - eyeX, fy = cenY - eyeY, fz = cenZ - eyeZ;
+    double len = sqrt(fx*fx + fy*fy + fz*fz);
+    fx /= len; fy /= len; fz /= len;
+
+    double sx = fy*upZ - fz*upY;
+    double sy = fz*upX - fx*upZ;
+    double sz = fx*upY - fy*upX;
+    len = sqrt(sx*sx + sy*sy + sz*sz);
+    sx /= len; sy /= len; sz /= len;
+
+    double ux = sy*fz - sz*fy;
+    double uy = sz*fx - sx*fz;
+    double uz = sx*fy - sy*fx;
+
+    double m[16] = {
+         sx,  ux, -fx, 0,
+         sy,  uy, -fy, 0,
+         sz,  uz, -fz, 0,
+          0,   0,   0, 1,
+    };
+    glMultMatrixd(m);
+    glTranslated(-eyeX, -eyeY, -eyeZ);
+}
 
 // ---------------------------------------------------------------------------
 // 数据结构
@@ -120,7 +166,7 @@ static void setupCamera(int w, int h)
 {
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(45.0, (double)w / h, 0.1, 100.0);
+    myPerspective(45.0, (double)w / h, 0.1, 100.0);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -130,7 +176,7 @@ static void setupCamera(int w, int h)
     float cx = g_camDist * cosf(rad_x) * sinf(rad_y);
     float cy = g_camDist * sinf(rad_x);
     float cz = g_camDist * cosf(rad_x) * cosf(rad_y);
-    gluLookAt(cx, cy, cz, 0, 0, 0, 0, 1, 0);
+    myLookAt(cx, cy, cz, 0, 0, 0, 0, 1, 0);
 }
 
 // ---------------------------------------------------------------------------
