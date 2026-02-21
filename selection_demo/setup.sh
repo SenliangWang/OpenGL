@@ -9,8 +9,8 @@ fi
 
 mkdir -p "$SCRIPT_DIR/build"
 cd "$SCRIPT_DIR/build"
-cmake -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_C_COMPILER=gcc-13 ..
-make -j"$(nproc)"
+cmake ..
+cmake --build . --config Release -j"$(nproc 2>/dev/null || echo 4)"
 
 echo ""
-echo "Build succeeded! Run: ./selection_demo/build/selection_demo"
+echo "Build succeeded!"
